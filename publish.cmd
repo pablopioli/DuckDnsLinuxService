@@ -1,0 +1,3 @@
+dotnet publish ./src/DDnsService.csproj -r linux-arm64 -c Release --self-contained true /p:PublishSingleFile=true /p:PublishTrimmed=true /p:PublishReadyToRun=true /p:IncludeNativeLibrariesInSingleFile=true -o bin/arm64
+dotnet publish ./src/DDnsService.csproj -r linux-x64 -c Release --self-contained true /p:PublishSingleFile=true /p:PublishTrimmed=true /p:PublishReadyToRun=true /p:IncludeNativeLibrariesInSingleFile=true -o bin/linux-x64
+dotnet publish ./src/DDnsService.csproj -r linux-musl-x64 -c Release --self-contained true /p:PublishSingleFile=true /p:PublishTrimmed=true /p:PublishReadyToRun=true /p:IncludeNativeLibrariesInSingleFile=true -o bin/musl-x64
