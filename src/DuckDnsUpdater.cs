@@ -6,6 +6,7 @@ public class DuckDnsUpdater : BackgroundService
 {
     private const string CacheFolder = "/var/lib/ddns";
     private const string CacheFile = "cache";
+    private const string IpQueryUrl = "http://whatismyip.akamai.com/";
 
     private readonly ILogger<DuckDnsUpdater> _logger;
     private readonly HttpClient _httpClient;
@@ -25,15 +26,33 @@ public class DuckDnsUpdater : BackgroundService
         {
             try
             {
+                var updateUrl = "https://www.duckdns.org/update";
+
+                var domains = _configuration.GetValue<string>("Domains");
+                if (string.IsNullOrEmpty(domains))
+                {
+                    _logger.LogError("DuckDns domains not configured");
+                    await AwaitUntilNextCheck(stoppingToken);
+                    continue;
+                }
+
+                var token = _configuration.GetValue<string>("Token");
+                if (string.IsNullOrEmpty(domains))
+                {
+                    _logger.LogError("DuckDns token not configured");
+                    await AwaitUntilNextCheck(stoppingToken);
+                    continue;
+                }
+
                 var currentIp = "";
 
                 try
                 {
-                    currentIp = await _httpClient.GetStringAsync("http://whatismyip.akamai.com/", stoppingToken);
+                    currentIp = await _httpClient.GetStringAsync(IpQueryUrl, stoppingToken);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogInformation("Cannot connect to http://whatismyip.akamai.com. Error: {error}", ex.ToString());
+                    _logger.LogInformation("Cannot connect to {server}. Error: {error}", IpQueryUrl, ex.ToString());
                 }
 
                 if (!string.IsNullOrEmpty(currentIp))
@@ -43,24 +62,9 @@ public class DuckDnsUpdater : BackgroundService
                     if (string.Equals(currentIp, cachedIp, StringComparison.Ordinal))
                     {
                         _logger.LogInformation("IP address has not changed");
-                        return;
+                        await AwaitUntilNextCheck(stoppingToken);
+                        continue;
                     }
-                }
-
-                var updateUrl = "https://www.duckdns.org/update";
-
-                var domains = _configuration.GetValue<string>("Domains");
-                if (string.IsNullOrEmpty(domains))
-                {
-                    _logger.LogError("DuckDns domains not configured");
-                    return;
-                }
-
-                var token = _configuration.GetValue<string>("Token");
-                if (string.IsNullOrEmpty(domains))
-                {
-                    _logger.LogError("DuckDns token not configured");
-                    return;
                 }
 
                 var url = $"{updateUrl}?domains={domains}&token={token}&ip={currentIp}";
@@ -82,25 +86,35 @@ public class DuckDnsUpdater : BackgroundService
                         break;
                 }
 
-                if (int.TryParse(_configuration.GetValue<string>("Internal") ?? "", out var interval))
-                {
-                    if (interval < 5)
-                    {
-                        interval = 5;
-                    }
-                }
-                else
-                {
-                    interval = 15;
-                }
-
-                await Task.Delay(interval * 60 * 1000, stoppingToken);
+                await AwaitUntilNextCheck(stoppingToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError("{exception}", ex.ToString());
+                if (ex is not TaskCanceledException)
+                {
+                    _logger.LogError("{exception}", ex.ToString());
+                    await Task.Delay(5 * 60 * 1000, stoppingToken);
+                }
             }
         }
+    }
+
+    [UnconditionalSuppressMessage("TrimAnalysis", "IL2026", Justification = "Only reads from configuration basic types")]
+    private async Task AwaitUntilNextCheck(CancellationToken stoppingToken)
+    {
+        if (int.TryParse(_configuration.GetValue<string>("Interval") ?? "", out var interval))
+        {
+            if (interval < 5)
+            {
+                interval = 5;
+            }
+        }
+        else
+        {
+            interval = 15;
+        }
+
+        await Task.Delay(interval * 60 * 1000, stoppingToken);
     }
 
     private static string GetLastIpRegistered()
