@@ -5,3 +5,5 @@ sudo cp ddns.conf /etc/ddns/ddns.conf
 sudo cp duckdns.service /etc/systemd/system/duckdns.service
 sudo systemctl daemon-reload
 sudo systemctl enable duckdns
+sudo systemctl start duckdns
+
